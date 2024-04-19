@@ -5,6 +5,7 @@
     <meta name="viewport"
           content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Document</title>
 </head>
 <body>
@@ -32,6 +33,8 @@
                 this.file = event.target.files[0];
             },
             async uploadFile() {
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+
                 const formData = new FormData();
                 formData.append('file', this.file);
 
@@ -40,7 +43,8 @@
                         method: 'POST',
                         body: formData,
                         headers: {
-                            'Content-Type': 'multipart/form-data'
+                            'Content-Type': 'multipart/form-data',
+                            'X-CSRF-TOKEN': csrfToken
                         }
                     });
 
