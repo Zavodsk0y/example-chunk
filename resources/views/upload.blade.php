@@ -13,6 +13,7 @@
     <input type="file" @change="selectFile">
     <button @click="uploadFile">Upload</button>
     <div v-if="uploadProgress !== null">
+        <progress :value="uploadProgress" max="100"></progress>
     </div>
 </div>
 </body>
@@ -43,13 +44,12 @@
                         method: 'POST',
                         body: formData,
                         headers: {
-                            'Content-Type': 'multipart/form-data',
                             'X-CSRF-TOKEN': csrfToken
                         }
                     });
 
                     const data = await response.json();
-                    if (data.success) {
+                    if (response.ok) {
                         console.log('File uploaded successfully');
                     } else {
                         console.error('Upload failed');
