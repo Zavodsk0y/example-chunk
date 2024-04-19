@@ -22,6 +22,11 @@ class FileController extends Controller
     // Получаем сохраненный файл
     $save = $receiver->receive();
 
+    // Проверяем, была ли успешно сохранена часть файла
+    if ($save === false) {
+        throw new UploadFailedException(); // Возможно, вы захотите создать своё исключение UploadFailedException
+    }
+
     // Проверяем, завершена ли загрузка
     if ($save->isFinished()) {
         // Сохраняем файл и возвращаем ответ
