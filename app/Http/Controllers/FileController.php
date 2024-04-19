@@ -28,7 +28,8 @@ class FileController extends Controller
         if ($save->isFinished()) {
             // save the file and return any response you need, current example uses `move` function. If you are
             // not using move, you need to manually delete the file by unlink($save->getFile()->getPathname())
-            return $this->saveFile($save->getFile());
+            $this->saveFile($save->getFile());
+            return response()->json('success');
         }
 
         // we are in chunk mode, lets send the current progress
@@ -43,24 +44,33 @@ class FileController extends Controller
 
     protected function saveFile(UploadedFile $file)
     {
-        $fileName = $this->createFilename($file);
-        // Group files by mime type
-        $mime = str_replace('/', '-', $file->getMimeType());
-        // Group files by the date (week
-        $dateFolder = date("Y-m-W");
+        $tempFilePath = storage_path("app/temp/") . $file->getClientOriginalName();
 
-        // Build the file path
-        $filePath = "upload/{$mime}/{$dateFolder}/";
-        $finalPath = storage_path("app/".$filePath);
-
-        // move the file name
-        $file->move($finalPath, $fileName);
+        $file->move(storage_path("app/temp"), $file->getClientOriginalName());
 
         return response()->json([
-            'path' => $filePath,
-            'name' => $fileName,
-            'mime_type' => $mime
+            'tempFilePath' => $tempFilePath
         ]);
+
+
+//        $fileName = $this->createFilename($file);
+//        // Group files by mime type
+//        $mime = str_replace('/', '-', $file->getMimeType());
+//        // Group files by the date (week
+//        $dateFolder = date("Y-m-W");
+//
+//        // Build the file path
+//        $filePath = "upload/{$mime}/{$dateFolder}/";
+//        $finalPath = storage_path("app/".$filePath);
+//
+//        // move the file name
+//        $file->move($finalPath, $fileName);
+//
+//        return response()->json([
+//            'path' => $filePath,
+//            'name' => $fileName,
+//            'mime_type' => $mime
+//        ]);
     }
 
     /**
@@ -68,14 +78,14 @@ class FileController extends Controller
      * @param UploadedFile $file
      * @return string
      */
-    protected function createFilename(UploadedFile $file)
-    {
-        $extension = $file->getClientOriginalExtension();
-        $filename = str_replace(".".$extension, "", $file->getClientOriginalName()); // Filename without extension
-
-        // Add timestamp hash to name of the file
-        $filename .= "_" . md5(time()) . "." . $extension;
-
-        return $filename;
-    }
+//    protected function createFilename(UploadedFile $file)
+//    {
+//        $extension = $file->getClientOriginalExtension();
+//        $filename = str_replace(".".$extension, "", $file->getClientOriginalName()); // Filename without extension
+//
+//        // Add timestamp hash to name of the file
+//        $filename .= "_" . md5(time()) . "." . $extension;
+//
+//        return $filename;
+//    }
 }
