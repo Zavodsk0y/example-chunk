@@ -34,29 +34,43 @@
                 this.file = event.target.files[0];
             },
             async uploadFile() {
-                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-                const formData = new FormData();
-                formData.append('file', this.file);
+                const chunkSize = 1024 * 1024; // 1MB
+                const fileSize = this.file.size;
+                let offset = 0;
 
-                try {
-                    const response = await fetch('/upload', {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-CSRF-TOKEN': csrfToken
+                while (offset < fileSize) {
+                    const chunk = this.file.slice(offset, offset + chunkSize);
+                    const formData = new FormData();
+                    formData.append('file', chunk);
+                    formData.append('offset', offset);
+                    formData.append('totalSize', fileSize);
+
+                    try {
+                        const response = await fetch('/upload', {
+                            method: 'POST',
+                            body: formData,
+                            headers: {
+                                'X-CSRF-TOKEN': csrfToken
+                            }
+                        });
+
+                        const data = await response.json();
+                        if (!response.ok) {
+                            console.error('Upload failed');
+                            return;
                         }
-                    });
 
-                    const data = await response.json();
-                    if (response.ok) {
-                        console.log('File uploaded successfully');
-                    } else {
-                        console.error('Upload failed');
+                        offset += chunkSize;
+                        this.uploadProgress = Math.min(Math.round((offset / fileSize) * 100), 100);
+                    } catch (error) {
+                        console.error('Error uploading file:', error);
+                        return;
                     }
-                } catch (error) {
-                    console.error('Error uploading file:', error);
                 }
+
+                console.log('File uploaded successfully');
             }
         }
     });
