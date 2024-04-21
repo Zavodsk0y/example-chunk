@@ -9,10 +9,40 @@ use Pion\Laravel\ChunkUpload\Exceptions\UploadMissingFileException;
 use Pion\Laravel\ChunkUpload\Handler\AbstractHandler;
 use Pion\Laravel\ChunkUpload\Handler\HandlerFactory;
 use Pion\Laravel\ChunkUpload\Receiver\FileReceiver;
+use Pion\Laravel\ChunkUpload\Save\ChunkSave;
+use Pion\Laravel\ChunkUpload\Save\SingleSave;
 
 class FileController extends Controller
 {
-    public function upload(Request $request) {
+    public function uploadChunk(Request $request)
+    {
+        $file = $request->file('file');
+        $fileName = $request->input('fileName');
+        $chunkIndex = $request->input('chunkIndex');
+        $totalChunks = $request->input('totalChunks');
+
+        $tempPath = storage_path("app/temp/{$fileName}");
+
+        // Открываем файл в режиме добавления
+        $fileStream = fopen($tempPath, 'ab');
+        fwrite($fileStream, file_get_contents($file->getPathname()));
+        fclose($fileStream);
+
+        // Проверяем, последний ли это чанк
+        if ((int) $chunkIndex === (int) $totalChunks - 1) {
+            // Перемещаем файл из временной папки в окончательное место хранения
+            $finalPath = storage_path("app/uploads/{$fileName}");
+            rename($tempPath, $finalPath);
+            return response()->json(['status' => 'complete', 'path' => $finalPath]);
+        }
+
+        return response()->json(['status' => 'success', 'chunkIndex' => $chunkIndex]);
+    }
+
+
+
+    public function upload(Request $request)
+    {
         // create the file receiver
         $receiver = new FileReceiver("file", $request, HandlerFactory::classFromRequest($request));
 
@@ -26,9 +56,11 @@ class FileController extends Controller
 
         // check if the upload has finished (in chunk mode it will send smaller files)
         if ($save->isFinished()) {
-            // save the file and return any response you need, current example uses `move` function. If you are
-            // not using move, you need to manually delete the file by unlink($save->getFile()->getPathname())
-            $this->saveFile($save->getFile());
+            // Log the assembled file before saving
+            Log::info('Assembled file:', ['path' => $save->getFile()->getPathname()]);
+
+            // save the file and return any response you need
+            $this->saveFile($save);
             return response()->json('success');
         }
 
@@ -42,50 +74,56 @@ class FileController extends Controller
         ]);
     }
 
-    protected function saveFile(UploadedFile $file)
+
+    protected function saveFile($save)
     {
-        $tempFilePath = storage_path("app/temp/") . $file->getClientOriginalName();
+        $originalName = $save->getFile()->getClientOriginalName() ?? 'default_name.png';
 
-        $file->move(storage_path("app/temp"), $file->getClientOriginalName());
+        $tempPath = storage_path("app/temp/{$originalName}");
 
-        return response()->json([
-            'tempFilePath' => $tempFilePath
-        ]);
+        // Ensure directory exists
+        if (!file_exists(dirname($tempPath))) {
+            mkdir(dirname($tempPath), 0777, true);
+        }
 
+        // Open file in append binary mode
+        $file = fopen($tempPath, 'ab');
+        if (!$file) {
+            Log::error("Unable to open file: {$tempPath}");
+            return;
+        }
 
-//        $fileName = $this->createFilename($file);
-//        // Group files by mime type
-//        $mime = str_replace('/', '-', $file->getMimeType());
-//        // Group files by the date (week
-//        $dateFolder = date("Y-m-W");
-//
-//        // Build the file path
-//        $filePath = "upload/{$mime}/{$dateFolder}/";
-//        $finalPath = storage_path("app/".$filePath);
-//
-//        // move the file name
-//        $file->move($finalPath, $fileName);
-//
-//        return response()->json([
-//            'path' => $filePath,
-//            'name' => $fileName,
-//            'mime_type' => $mime
-//        ]);
+        // Get chunk data
+        $chunkData = file_get_contents($save->getFile()->getPathname());
+        if ($chunkData === false) {
+            Log::error("Failed to read chunk data");
+            fclose($file);
+            return;
+        }
+
+        // Write the chunk to the file
+        fwrite($file, $chunkData);
+        fclose($file);
+
+        Log::info("Chunk appended to {$tempPath}");
+
+        // After all chunks are processed
+        if ($save->isFinished()) {
+            $finalPath = storage_path("app/uploads/{$originalName}");
+
+            // Ensure final directory exists
+            if (!file_exists(dirname($finalPath))) {
+                mkdir(dirname($finalPath), 0777, true);
+            }
+
+            // Move the file to the final location
+            if (!rename($tempPath, $finalPath)) {
+                Log::error("Failed to move file from {$tempPath} to {$finalPath}");
+            } else {
+                Log::info("File moved to final location: {$finalPath}");
+            }
+        }
+
+        return $tempPath;
     }
-
-    /**
-     * Create unique filename for uploaded file
-     * @param UploadedFile $file
-     * @return string
-     */
-//    protected function createFilename(UploadedFile $file)
-//    {
-//        $extension = $file->getClientOriginalExtension();
-//        $filename = str_replace(".".$extension, "", $file->getClientOriginalName()); // Filename without extension
-//
-//        // Add timestamp hash to name of the file
-//        $filename .= "_" . md5(time()) . "." . $extension;
-//
-//        return $filename;
-//    }
 }

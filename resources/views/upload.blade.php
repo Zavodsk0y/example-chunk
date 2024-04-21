@@ -26,7 +26,7 @@
         data() {
             return {
                 file: null,
-                uploadProgress: null
+                uploadProgress: 0
             };
         },
         methods: {
@@ -35,37 +35,36 @@
             },
             async uploadFile() {
                 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                const chunkSize = 1024 * 1024; // Размер чанка в 1MB
+                const totalChunks = Math.ceil(this.file.size / chunkSize);
 
-                const chunkSize = 1024 * 1024; // 1MB
-                const fileSize = this.file.size;
-                let offset = 0;
-
-                while (offset < fileSize) {
+                for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                    const offset = chunkIndex * chunkSize;
                     const chunk = this.file.slice(offset, offset + chunkSize);
                     const formData = new FormData();
                     formData.append('file', chunk);
-                    formData.append('offset', offset);
-                    formData.append('totalSize', fileSize);
+                    formData.append('fileName', this.file.name);
+                    formData.append('chunkIndex', chunkIndex);
+                    formData.append('totalChunks', totalChunks);
 
                     try {
-                        const response = await fetch('/upload', {
+                        const response = await fetch('/upload-chunk', {
                             method: 'POST',
-                            body: formData,
                             headers: {
                                 'X-CSRF-TOKEN': csrfToken
-                            }
+                            },
+                            body: formData
                         });
 
-                        const data = await response.json();
-                        if (!response.ok) {
-                            console.error('Upload failed');
-                            return;
+                        if (response.ok) {
+                            const data = await response.json();
+                            this.uploadProgress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
+                            console.log('Chunk uploaded', data);
+                        } else {
+                            throw new Error('Failed to upload chunk');
                         }
-
-                        offset += chunkSize;
-                        this.uploadProgress = Math.min(Math.round((offset / fileSize) * 100), 100);
                     } catch (error) {
-                        console.error('Error uploading file:', error);
+                        console.error('Error uploading chunk:', error);
                         return;
                     }
                 }
