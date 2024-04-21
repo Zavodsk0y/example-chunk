@@ -10,10 +10,10 @@
 </head>
 <body>
 <div id="app">
-    <input type="file" @change="selectFile">
-    <button @click="uploadFile">Upload</button>
-    <div v-if="uploadProgress !== null">
-        <progress :value="uploadProgress" max="100"></progress>
+    <input type="file" multiple @change="selectFiles"> <!-- Исправлено для множественного выбора -->
+    <button @click="uploadFiles">Upload</button>
+    <div v-if="uploadProgress > 0">
+        <progress :value="uploadProgress" max="100"></progress> <!-- Прогресс будет показан, если началась загрузка -->
     </div>
 </div>
 </body>
@@ -25,51 +25,56 @@
         el: "#app",
         data() {
             return {
-                file: null,
+                files: [], // Исправлено для хранения массива файлов
                 uploadProgress: 0
             };
         },
         methods: {
-            selectFile(event) {
-                this.file = event.target.files[0];
+            selectFiles(event) {
+                this.files = event.target.files; // Сохраняем массив выбранных файлов
             },
-            async uploadFile() {
+            async uploadFiles() {
                 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
                 const chunkSize = 1024 * 1024; // Размер чанка в 1MB
-                const totalChunks = Math.ceil(this.file.size / chunkSize);
 
-                for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-                    const offset = chunkIndex * chunkSize;
-                    const chunk = this.file.slice(offset, offset + chunkSize);
-                    const formData = new FormData();
-                    formData.append('file', chunk);
-                    formData.append('fileName', this.file.name);
-                    formData.append('chunkIndex', chunkIndex);
-                    formData.append('totalChunks', totalChunks);
+                for (let fileIndex = 0; fileIndex < this.files.length; fileIndex++) {
+                    const file = this.files[fileIndex];
+                    const totalChunks = Math.ceil(file.size / chunkSize);
 
-                    try {
-                        const response = await fetch('/upload-chunk', {
-                            method: 'POST',
-                            headers: {
-                                'X-CSRF-TOKEN': csrfToken
-                            },
-                            body: formData
-                        });
+                    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                        const offset = chunkIndex * chunkSize;
+                        const chunk = file.slice(offset, offset + chunkSize);
+                        const formData = new FormData();
+                        formData.append('file', chunk);
+                        formData.append('fileName', file.name);
+                        formData.append('fileIndex', fileIndex);
+                        formData.append('chunkIndex', chunkIndex);
+                        formData.append('totalChunks', totalChunks);
 
-                        if (response.ok) {
+                        try {
+                            const response = await fetch('/upload-chunk', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRF-TOKEN': csrfToken
+                                },
+                                body: formData
+                            });
+
+                            if (!response.ok) {
+                                throw new Error('Failed to upload chunk');
+                            }
+
                             const data = await response.json();
-                            this.uploadProgress = Math.round(((chunkIndex + 1) / totalChunks) * 100);
                             console.log('Chunk uploaded', data);
-                        } else {
-                            throw new Error('Failed to upload chunk');
+                        } catch (error) {
+                            console.error('Error uploading chunk:', error);
+                            return;
                         }
-                    } catch (error) {
-                        console.error('Error uploading chunk:', error);
-                        return;
                     }
-                }
 
-                console.log('File uploaded successfully');
+                    console.log('File uploaded successfully', file.name);
+                }
+                this.uploadProgress = 100; // Обновление прогресса после загрузки всех файлов
             }
         }
     });

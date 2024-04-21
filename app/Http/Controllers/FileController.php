@@ -18,19 +18,24 @@ class FileController extends Controller
     {
         $file = $request->file('file');
         $fileName = $request->input('fileName');
+        $fileIndex = $request->input('fileIndex');
         $chunkIndex = $request->input('chunkIndex');
         $totalChunks = $request->input('totalChunks');
 
-        $tempPath = storage_path("app/temp/{$fileName}");
+        $tempPath = storage_path("app/temp/file{$fileIndex}/{$fileName}");
 
-        // Открываем файл в режиме добавления
+        // Создание директории, если необходимо
+        if (!file_exists(dirname($tempPath))) {
+            mkdir(dirname($tempPath), 0777, true);
+        }
+
+        // Сохранение чанка в файл
         $fileStream = fopen($tempPath, 'ab');
         fwrite($fileStream, file_get_contents($file->getPathname()));
         fclose($fileStream);
 
-        // Проверяем, последний ли это чанк
+        // Проверка завершения загрузки всех чанков
         if ((int) $chunkIndex === (int) $totalChunks - 1) {
-            // Перемещаем файл из временной папки в окончательное место хранения
             $finalPath = storage_path("app/uploads/{$fileName}");
             rename($tempPath, $finalPath);
             return response()->json(['status' => 'complete', 'path' => $finalPath]);
